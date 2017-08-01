@@ -1,0 +1,173 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/12/Math.jack
+
+/**
+ * A library of commonly used mathematical functions.
+ * Note: Jack compilers implement multiplication and division using OS method calls.
+ */
+class Math {
+
+	static Array twoToThe;
+	
+	/** Initializes the library. */
+    function void init() {
+		let twoToThe = Array.new(16);
+		let twoToThe[0] = 1;
+		let twoToThe[1] = 2;
+		let twoToThe[2] = 4;
+		let twoToThe[3] = 8;
+		let twoToThe[4] = 16;
+		let twoToThe[5] = 32;
+		let twoToThe[6] = 64;
+		let twoToThe[7] = 128;
+		let twoToThe[8] = 256;
+		let twoToThe[9] = 512;
+		let twoToThe[10] = 1024;
+		let twoToThe[11] = 2048;
+		let twoToThe[12] = 4096;
+		let twoToThe[13] = 8192;
+		let twoToThe[14] = 16384;
+		
+		// 16-bit 2's complement can't actually hold 32768, but this makes negatives work automatically
+		let twoToThe[15] = 16384 + 16384; 	
+		
+		return;
+    }
+
+    /** Returns the absolute value of x. */
+    function int abs(int x) {
+		if(x < 0) {
+			return -x;
+		}
+		else {
+			return x;
+		}
+    }
+
+    /** Returns the product of x and y. 
+     *  When a Jack compiler detects the multiplication operator '*' in the 
+     *  program's code, it handles it by invoking this method. In other words,
+     *  the Jack expressions x*y and multiply(x,y) return the same value.
+     */
+
+	function int multiply(int x, int y) {
+		var int sum, shiftedX, i;
+		
+		let sum = 0;
+		let shiftedX = x;
+		
+		while(i < 16) {	// shift through each bit of the 16-bit integers
+			if(~((y & twoToThe[i]) = 0) ) {
+				let sum = sum + shiftedX;
+			}
+			let shiftedX = shiftedX + shiftedX;
+			let i = i + 1;
+		}
+		
+		return sum;
+    }
+
+	/** Returns the integer part of x/y.
+     *  When a Jack compiler detects the multiplication operator '/' in the 
+     *  program's code, it handles it by invoking this method. In other words,
+     *  the Jack expressions x/y and divide(x,y) return the same value.
+     */
+    function int divide(int x, int y) {
+		
+		var int q, result, twoY;
+		var boolean neg;
+		
+		// check for and throw divide by zero error
+		if(y = 0) {
+			do Sys.error(3);
+		}
+		
+		let neg = ((x < 0) = (y < 0));
+		let x = Math.abs(x);
+		let y = Math.abs(y);
+		
+		
+		if(y > x) {
+			return 0;
+		}
+		// this catches the unfortunate problem of overflow stopping diving 32767 by itself
+		if(y = x) {
+			return 1;
+		}
+		
+		// this catches potential overflow errors when doubling y.
+		let twoY = y + y;
+		if((twoY) < 0) {
+			let twoY = 32767;
+		}
+		let q = Math.divide(x, twoY);	// use this syntax to make recursion evident
+				
+		if((x - (2*q*y)) < y) {
+			let result = q + q;
+		}
+		else {
+			let result = q + q +1;
+		}
+		
+		// if only one of x or y were negative, negate the result before returning.
+		if(neg) {
+			return result;
+		}
+		else {
+			return -result;
+		}
+		
+    }
+
+    /** Returns the integer part of the square root of x. */
+    function int sqrt(int x) {
+
+		var int i, y, yTest, yTest2;
+		
+		// check for and throw error for square root of a negative number
+		if(x < 0) {
+			do Sys.error(4);
+		}
+		
+		let y = 0;
+		let i = 7;		// n/2-1 for n = 16-bit integeres
+		while (i > -1) {
+			let yTest = y + twoToThe[i];
+			let yTest2 = yTest * yTest;
+			
+			if(~(yTest2 > x) & (yTest2 > 0)) {	// if yTest^2 is negative, there was an int overflow
+				let y = yTest;
+			}
+			let i = i - 1;
+		}
+		
+		return y;
+    }
+
+    /** Returns the greater number. */
+    function int max(int a, int b) {
+		if(a > b) {
+			return a;
+		}
+		else {
+			return b;
+		}
+    }
+
+    /** Returns the smaller number. */
+    function int min(int a, int b) {
+		if(a < b) {
+			return a;
+		}
+		else {
+			return b;
+		}
+    }
+	
+	// utility function export the static array to the pixel-drawing functions
+	function int powerOfTwo(int p) {
+		return twoToThe[p];
+	}
+}

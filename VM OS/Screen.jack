@@ -1,0 +1,283 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/12/Screen.jack
+
+/**
+ * A library of functions for displaying graphics on the screen.
+ * The Hack physical screen consists of 256 rows (indexed 0..255, top to bottom)
+ * of 512 pixels each (indexed 0..511, left to right). The top left pixel on 
+ * the screen is indexed (0,0).
+ */
+class Screen {
+	static Array screenMem;
+	static boolean currentColor;
+
+    /** Initializes the Screen. */
+    function void init() {
+		let screenMem = 16384;		// pointer to allow access to screen memory map
+		let currentColor = true;	// draws black by default (on a white screen)
+		
+		return;
+    }
+
+    /** Erases the entire screen. */
+    function void clearScreen() {
+		var int i;
+		
+		let i = 0;
+		// The screen consists of 8192 words (256 px * 512 px /16 bits); set each to zero
+		while(i < 8192) {
+			let screenMem[i] = 0;
+			let i = i + 1;
+		}
+		return;
+    }
+
+    /** Sets the current color, to be used for all subsequent drawXXX commands.
+     *  Black is represented by true, white by false. */
+    function void setColor(boolean b) {
+		let currentColor = b;
+		return;
+    }
+
+    /** Draws the (x,y) pixel, using the current color. */
+    function void drawPixel(int x, int y) {
+		var int memOffset, pxPosition;
+		
+		// check for illegal pixel coordinates
+		if ( (x < 0) | ( x > 511) | (y < 0) | (y > 255) ) {
+			do Sys.error(7);
+		}
+		
+		let memOffset = (x / 16) + (y * 32);  // each pixel is 1/16 of a word, with each row 32 words long
+		let x = x & 15;		// x mod 16;
+		let pxPosition = Math.powerOfTwo(x);
+		
+		// turn the pixel either on or off based on the current color setting
+		if (currentColor) {
+			let screenMem[memOffset] = screenMem[memOffset] | pxPosition;
+		}
+		else {
+			let screenMem[memOffset] = screenMem[memOffset] & (~pxPosition);
+		}
+		
+		return;		
+    }
+
+    /** Draws a line from pixel (x1,y1) to pixel (x2,y2), using the current color. */
+    function void drawLine(int x1, int y1, int x2, int y2) {
+		var int dx, dy, adyMinusbdx, ymod;
+		
+		// check for illegal pixel coordinates
+		if ( (x1 < 0) | ( x1 > 511) | (x2 < 0) | (x2 > 511) | (y1 < 0) | (y1 > 255) | (y2 < 0) | (y2 > 255) ) {
+			do Sys.error(8);
+		}
+		
+		// first check for vertical and horizontal lines, before doing anything complicated
+		if(x1 = x2) {
+			do Screen.vertLine(x1, Math.min(y1,y2), Math.max(y1,y2));
+			return;
+		}
+		if(y1 = y2) {
+			do Screen.horizLine(Math.min(x1, x2), Math.max(x1, x2), y1);
+			return;
+		} 
+		
+		// Now we're doing the non-optimized lines.  This could probably still be sped up.
+		// Always going to go from x1 to x2, low to high, so switch the coords if needed.
+		if(x1 > x2) {
+			let dx = x1 - x2;
+			let x1 = x2;
+			let x2 = x1 + dx + 1;
+			let dy = y1;
+			let y1 = y2;
+			let y2 = dy;
+		}
+		else {
+			let dx = x2 - x1;
+			let x2 = x2 + 1;
+		}
+				
+		// y could be increasing or decreasing, so we need to set values that are meaningful either way
+		let dy = Math.abs(y2 - y1);
+		if(y1 < y2) {
+			let ymod = 1;
+			let y2 = y2 + 1;
+		}
+		else {
+			let ymod = -1;
+			let y2 = y2 - 1;
+		}
+
+		let adyMinusbdx = 0;
+		
+		while( (x1 < x2) & (Math.abs(y2 - y1) > 0) ) {
+			do Screen.drawPixel(x1, y1);
+			
+			if(adyMinusbdx < 0) {
+				let x1 = x1 + 1;
+				let adyMinusbdx = adyMinusbdx + Math.abs(dy);
+			}
+			else {
+				let y1 = y1 + ymod;
+				let adyMinusbdx = adyMinusbdx - dx;
+			}			
+		}
+		
+		return;
+    }
+
+    /** Draws a filled rectangle whose top left corner is (x1, y1)
+     * and bottom right corner is (x2,y2), using the current color. */
+    function void drawRectangle(int x1, int y1, int x2, int y2) {
+		var int temp;
+				
+		// check for illegal pixel coordinates
+		if ( (x1 < 0) | ( x1 > 511) | (x2 < 0) | (x2 > 511) | (y1 < 0) | (y1 > 255) | (y2 < 0) | (y2 > 255) ) {
+			do Sys.error(9);
+		}
+		
+		if(y1 > y2) {
+			let temp = y2;
+			let y2 = y1 + 1;
+			let y1 = temp;
+		}
+		else {
+			let y2 = y2 + 1;
+		}
+		if(x1 > x2) {
+			let temp = x1;
+			let x1 = x2;
+			let x2 = temp;
+		}
+		
+		while(y1 < y2) {
+			// replace this with drawHoriz() or whatever when it exists
+			do Screen.horizLine(x1, x2, y1);
+			let y1 = y1 + 1;
+		}
+		return;
+    }
+
+    /** Draws a filled circle of radius r<=181 around (x,y), using the current color. */
+    function void drawCircle(int x, int y, int r) {
+		var int dx, dy;
+		
+		// check for illegal center coordinate or radius
+		if ( (x < 0) | ( x > 511) | (y < 0) | (y > 255) ) {
+			do Sys.error(12);
+		}
+		if ( ((x - r) < 0) | ((x + r) > 511) | ((y - r) < 0) | ((y + r) > 255) ) {
+			do Sys.error(13);
+		}
+		
+		let dy = -r;
+		while (dy < (r + 1)) {
+			let dx = Math.sqrt((r*r) - (dy*dy));
+			do Screen.horizLine(x - dx, x + dx, y + dy);
+			let dy = dy + 1;
+		}
+		
+		return;		
+    }
+	
+	/** Efficiently draws horizontal lines.  Assumes x1 is less than x2. */
+	function void horizLine(int x1, int x2, int y) {
+		var int memOffset, finalMemOffset;
+		var int startPxMask, endPxMask;
+		var int y32;
+		var boolean doFinalWord;
+		
+		let y32 = y  * 32;
+		let memOffset = (x1 / 16) + y32;  // each pixel is 1/16 of a word, with each row 32 words long
+		let finalMemOffset = (x2 / 16) + y32;
+		
+		// this check is needed to avoid filling the full 16 px when x1 and x2 are in the same word
+		if(~(memOffset = finalMemOffset)) {
+			// get the affected pixels for the starting and final incomplete words. 
+			let startPxMask = 0 - Math.powerOfTwo(x1 & 15);	
+			let endPxMask = Math.powerOfTwo((x2 + 1) & 15) - 1 ;
+			let doFinalWord = true;
+		}	
+		else
+		{
+			// determining a mask with empty space before and after is more complex
+			let endPxMask = 0;
+			let startPxMask = Math.powerOfTwo((x2 & 15) + 1) - Math.powerOfTwo(x1 & 15);
+			let doFinalWord = false;
+		}
+		// This is for black; the large amount of repeated code is justified by avoiding processing an
+		// if statement inside the while loop.
+		if(currentColor) {
+			// if there is an incomplete first word, fill it in
+			if(~(startPxMask = 0)) {
+				let screenMem[memOffset] = screenMem[memOffset] | startPxMask;
+				let memOffset = memOffset + 1;
+			}
+		
+			while(memOffset < finalMemOffset) {
+				let screenMem[memOffset] = -1;
+				let memOffset = memOffset + 1;
+			}
+		
+			// and then the final, possibly incomplete word
+			if( (endPxMask = 0) & doFinalWord) {
+				let screenMem[memOffset] = -1;
+			}
+			else {
+				let screenMem[memOffset] = screenMem[memOffset] | endPxMask;
+			}
+		}
+		// and then for white
+		else {
+			if(~(startPxMask = 0)) {
+				let screenMem[memOffset] = screenMem[memOffset] & (~startPxMask);
+				let memOffset = memOffset + 1;
+			}
+		
+			while(memOffset < finalMemOffset) {
+				let screenMem[memOffset] = 0;
+				let memOffset = memOffset + 1;
+			}
+		
+			// and then the final, possibly incomplete word
+			if( (endPxMask = 0) & doFinalWord) {
+				let screenMem[memOffset] = 0;
+			}
+			else {
+				let screenMem[memOffset] = screenMem[memOffset] & (~endPxMask);
+			}
+		}
+						
+		return;
+	}
+	
+	/** Efficiently draws vertical lines.  Assumes y1 is less than y2. */
+	function void vertLine(int x, int y1, int y2) {
+		var int memOffset, pxPosition;
+		
+		let memOffset = (x / 16) + (y1 * 32);  // each pixel is 1/16 of a word, with each row 32 words long
+		let x = x & 15;		// x mod 16;
+		let pxPosition = Math.powerOfTwo(x);
+		let y2 = y2 + 1;
+		
+		// turn the pixel either on or off based on the current color setting
+		if (currentColor) {
+			while (y1 < y2) {
+				let screenMem[memOffset] = screenMem[memOffset] | pxPosition;
+				let y1 = y1 + 1;
+				let memOffset = memOffset + 32;
+			}		
+		}
+		else {
+			while (y1 < y2) {
+				let screenMem[memOffset] = screenMem[memOffset] & (~pxPosition);
+				let y1 = y1 + 1;
+				let memOffset = memOffset + 32;
+			}		
+		}
+
+		return;
+	}
+}

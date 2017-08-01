@@ -1,0 +1,179 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/12/Memory.jack
+
+/**
+ * This library provides two services: direct access to the computer's main
+ * memory (RAM), and allocation and recycling of memory blocks. The Hack RAM
+ * consists of 32,768 words, each holding a 16-bit binary number.
+ */ 
+class Memory {
+
+	// Throughout the Memory class, Arrays are used essentially as pointers.  They are never initialized 
+	// by Array.new() and serve as a convenient way to dereference a particular memory location.
+	static Array memory;
+	
+	// freeList is implemented as freeList[0] = size of the free segment; 
+	// freeList[1] = address of next free segment
+	static Array freeList;
+	
+	static int minBlockSize;
+	
+
+    /** Initializes the class. */
+    function void init() {
+		
+		let memory = 0;
+		let freeList = 2048;
+		let freeList[0] = 16384 - 2048;		// Heap is addresses 2048-16383
+		let freeList[1] = null;
+		
+		let minBlockSize = 2;
+		
+		return;
+    }
+
+    /** Returns the RAM value at the given address. */
+    function int peek(int address) {
+		return memory[address];
+    }
+
+    /** Sets the RAM value at the given address to the given value. */
+    function void poke(int address, int value) {
+		let memory[address] = value;
+		return;
+    }
+
+    /** Finds an available RAM block of the given size and returns
+     *  a reference to its base address. */
+    function int alloc(int size) {
+		
+		var Array listPosition, prevListPos;
+		var Array block, bestBlock, prevBlock;
+		var int bestSize;
+		var boolean allowedBlock;
+		
+		if(size < 1) {
+			do Sys.error(5);	// throw allocated memory size must be positive
+		}
+		
+		let listPosition = freeList;
+		let prevListPos = null;
+		let bestSize = 32767;
+		let bestBlock = null;
+		
+		// Search available memory segments for the best fit
+		while(~(listPosition = null)) {
+			// a block is allowed if it is either the exact size needed or it leaves more than minBlockSize
+			let allowedBlock = ( (listPosition[0] = (size + 1)) | (listPosition[0] > (size + minBlockSize)) ); 
+			
+			// check for a new smallest block allowed block
+			if( (allowedBlock) & (listPosition[0] < bestSize) ) {
+				let bestBlock = listPosition;
+				let bestSize = listPosition[0];
+				let prevBlock = prevListPos;
+			}
+			let prevListPos = listPosition;
+			let listPosition = listPosition[1];
+		}
+		
+		if(bestBlock = null) {
+			do Sys.error(6);	// no appropriate space found; heap overflow error
+			return null;
+		}
+		
+		// Check if allocating the entire block; if not, we need to create new size and "next free" entries
+		if(bestSize = (size +1)) {
+			// if prevBlock is null, the allocated block is at freeList, which needs to be moved
+			if(prevBlock = null) {
+				let freeList = bestBlock[1];
+			}
+			else
+			{
+				let prevBlock[1] = bestBlock[1];
+			}
+		}
+		else {
+			// listPosition now represents a new free block created from the remaining space
+			let listPosition = bestBlock + size + 1;
+			let listPosition[0] = bestSize - (size + 1);
+			let listPosition[1] = bestBlock[1];
+			if(prevBlock = null) {
+				let freeList = listPosition;
+			}
+			else {
+				let prevBlock[1] = listPosition;
+			}
+		}
+		
+		// finally, write the allocated size header and return the address
+		let bestBlock[0] = size;
+		return bestBlock + 1;
+	}		
+    
+
+    /** De-allocates the given object (cast as an array) by making
+     *  it available for future allocations. Merges deallocated sections with any adjacent free blocks
+	 *  to avoid fragmentation	 */
+    function void deAlloc(Array o) {
+		var int segLength;
+		var Array segPosition, listPosition, prevBlock;
+		
+		let listPosition = 0;
+		// the allocated segment begins one address before the object. The previous slot holds the object size.
+		let segPosition = o - 1;
+		let segLength = o[-1] + 1;
+				
+		// if the deallocated section is before freeList, it's the new freeList
+		if(segPosition < freeList) {
+			if( (segPosition + segLength) = freeList) {
+				let segPosition[1] = freeList[1];
+				let segLength = segLength + freeList[0];
+			}
+			else {
+				let segPosition[1] = freeList;
+			}
+			let freeList = segPosition;
+			let freeList[0] = segLength;
+			return;
+		}
+		
+		// Otherwise, start at freeList and move through. 
+		// Keeps the sections in order and merges any adjacent blocks into one larger free block
+		let listPosition = freeList;
+		let prevBlock = null;
+				
+		while( (listPosition < segPosition) & ~(listPosition = null) ) {
+			let prevBlock = listPosition;
+			let listPosition = listPosition[1];
+		}
+		
+		// if the deallocated segment is adjacent to the previous free block, merge it
+		if( (prevBlock + prevBlock[0]) = segPosition) {
+			let prevBlock[0] = prevBlock[0] + segLength;
+			let segPosition = prevBlock;
+			let segLength = prevBlock[0];
+		}
+		// otherwise, link it to the end
+		else {
+			let prevBlock[1] = segPosition;
+		}
+		
+		
+		let segPosition[0] = segLength;
+		// if not at the end of the list, insert the segment and check for adjaceny to the next free block
+		if(~(listPosition = null))
+		{
+			if( (segPosition + segLength) = listPosition) {
+				let segPosition[0] = segPosition[0] + listPosition[0];
+				let segPosition[1] = listPosition[1];
+			}
+			else {
+				let segPosition[1] = listPosition;
+			}
+		}
+		
+		return;
+    }    
+}
